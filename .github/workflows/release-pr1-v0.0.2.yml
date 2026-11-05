@@ -1,0 +1,60 @@
+name: Publish muKsMaTT v.0.0.2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'patches/advanced-dvd-mux-mkv-only.patch'
+      - '.github/workflows/release-pr1-v0.0.2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-tested-artifact:
+    name: Publish exact PR#1 standalone test artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Ensure the release doesn't already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v.0.0.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::v.0.0.2 already exists: refusing to replace release assets"
+            exit 1
+          fi
+
+      - name: Download successful PR#1 tested standalone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tested-artifact"
+          gh run download 42105783168 --repo "$GITHUB_REPOSITORY" \
+            --name muKsMaTT-v0.0.2-PR1-Linux-amd64Standalone \
+            --dir "$RUNNER_TEMP/tested-artifact"
+          cd "$RUNNER_TEMP/tested-artifact"
+          test -f muKsMaTT-0.0.2-PR1-Linux-amd64Standalone
+          test -f SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          echo "Verified tested standalone artifact for v.0.0.2"
+
+      - name: Create release and attach the original tested executable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/tested-artifact"
+          gh release create v.0.0.2 \
+            muKsMaTT-0.0.2-PR1-Linux-amd64Standalone \
+            SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "muKsMaTT v.0.0.2" \
+            --prerelease \
+            --notes "Linux standalone update from PR#1. Fixes ADVANCED > MUX format options: DVD streams can select MKV only; Blu-ray and non-DVD selections retain the original choices. Original media engine, CLI, and bundled runtime files are unchanged. This release publishes the exact SHA-256-verified executable previously tested in private GitHub Actions run 42105783168."
