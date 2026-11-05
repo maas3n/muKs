@@ -1,0 +1,83 @@
+--- a/src/advanced_merger_ui_linux.go
++++ b/src/advanced_merger_ui_linux.go
+@@ -16,6 +16,18 @@
+ 	"fyne.io/fyne/v2/widget"
+ )
+ 
++// advancedMuxFormatOptions limits DVD-containing selections to MKV in the
++// ADVANCED UI. No muxing or stream-processing behavior is changed.
++func advancedMuxFormatOptions(chosen []mergerStream) ([]string, bool) {
++	options := []string{"MKV — all selected streams and chapters", "M2TS — video/audio/PGS; no chapters"}
++	for _, stream := range chosen {
++		if stream.Track.DVDTitle > 0 {
++			return options[:1], true
++		}
++	}
++	return options, false
++}
++
+ func (g *linuxGUI) buildAdvancedMerger() fyne.CanvasObject {
+ 	var streams []mergerStream
+ 	var checks []*widget.Check
+@@ -469,10 +481,13 @@
+ 			dialog.ShowInformation("Output filename", "Enter a filename ending in .mkv or .m2ts, without folders.", g.window)
+ 			return
+ 		}
+-		format := widget.NewSelect([]string{"MKV — all selected streams and chapters", "M2TS — video/audio/PGS; no chapters"}, nil)
+-		if ext == ".m2ts" { format.SetSelected("M2TS — video/audio/PGS; no chapters") } else { format.SetSelected("MKV — all selected streams and chapters") }
++		options, hasDVD := advancedMuxFormatOptions(chosen)
++		format := widget.NewSelect(options, nil)
++		if ext == ".m2ts" && !hasDVD { format.SetSelected(options[1]) } else { format.SetSelected(options[0]) }
++		description := "M2TS excludes chapters and requires Blu-ray-compatible tracks. Unsupported streams produce an error."
++		if hasDVD { description = "DVD source selected: MKV is the only available output format." }
+ 		dialog.NewCustomConfirm("Choose ADVANCED MUX format", "Mux", "Cancel",
+-			container.NewVBox(widget.NewLabel("M2TS excludes chapters and requires Blu-ray-compatible tracks. Unsupported streams produce an error."), format),
++			container.NewVBox(widget.NewLabel(description), format),
+ 			func(ok bool) {
+ 				if !ok { return }
+ 				extension := ".mkv"
+--- a/src/advanced_mux_format_linux_test.go
++++ b/src/advanced_mux_format_linux_test.go
+@@ -0,0 +1,42 @@
++//go:build linux && !cli
++
++package main
++
++import "testing"
++
++func TestAdvancedMuxFormatOptionsDVDOnly(t *testing.T) {
++	formats, dvd := advancedMuxFormatOptions([]mergerStream{
++		{Track: trackOption{DVDTitle: 1, Kind: "video"}},
++		{Track: trackOption{DVDTitle: 1, Kind: "audio"}},
++	})
++	if !dvd || len(formats) != 1 || formats[0] != "MKV — all selected streams and chapters" {
++		t.Fatalf("DVD should offer only MKV; dvd=%v formats=%v", dvd, formats)
++	}
++}
++
++func TestAdvancedMuxFormatOptionsMixedWithDVD(t *testing.T) {
++	formats, dvd := advancedMuxFormatOptions([]mergerStream{
++		{BluRay: true, Track: trackOption{Kind: "video"}},
++		{Track: trackOption{DVDTitle: 3, Kind: "audio"}},
++	})
++	if !dvd || len(formats) != 1 {
++		t.Fatalf("mixed selection with DVD should offer only MKV; dvd=%v formats=%v", dvd, formats)
++	}
++}
++
++func TestAdvancedMuxFormatOptionsWithoutDVD(t *testing.T) {
++	for _, tc := range []struct {
++		name    string
++		streams []mergerStream
++	}{
++		{"Blu-ray", []mergerStream{{BluRay: true, Track: trackOption{Kind: "video"}}}},
++		{"regular file", []mergerStream{{Track: trackOption{Kind: "video"}}}},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			formats, dvd := advancedMuxFormatOptions(tc.streams)
++			if dvd || len(formats) != 2 {
++				t.Fatalf("non-DVD selection should retain MKV and M2TS; dvd=%v formats=%v", dvd, formats)
++			}
++		})
++	}
++}
