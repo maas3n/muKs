@@ -118,16 +118,23 @@ jobs:
       - name: End-to-end DVD test of both CLI commands, no intermediate MKV
         run: |
           set -euo pipefail
-          standalone="$GITHUB_WORKSPACE/dist/muKsMaTT-0.0.2-PR2-DVD-CLI-Linux-amd64Standalone"
+          cd "$GITHUB_WORKSPACE/dist"
+          standalone="./muKsMaTT-0.0.2-PR2-DVD-CLI-Linux-amd64Standalone"
           XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" "$standalone" --standalone-self-test
           mkdir -p "$RUNNER_TEMP/fixture" "$RUNNER_TEMP/outputs/main" "$RUNNER_TEMP/outputs/advanced"
           python3 "$SOURCE_ROOT/android/native/tests/make-dvd-demux-fixture.py" "$RUNNER_TEMP/fixture"
           dvd="$RUNNER_TEMP/fixture/dvd"
           test -f "$dvd/VIDEO_TS/VIDEO_TS.IFO"
-          XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" "$standalone" --cli demux \
+          # Run the actual terminal interface: ./standalone demux and
+          # ./standalone advanced demux. NO --cli argument or GUI.
+          XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" timeout 180s "$standalone" demux \
             --title 1 --output "$RUNNER_TEMP/outputs/main" --video mpeg2 "$dvd"
-          XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" "$standalone" --cli advanced demux \
+          XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" timeout 180s "$standalone" advanced demux \
             --title 1 --output "$RUNNER_TEMP/outputs/advanced" --video mpeg2 "$dvd"
+          # The previously supported --cli alias must also continue to route.
+          XDG_CACHE_HOME="$RUNNER_TEMP/pr2-test-cache" timeout 30s "$standalone" --cli demux --help \
+            > "$RUNNER_TEMP/cli-alias-help.txt" 2>&1
+          grep -Fq 'Usage: muksmatt-cli demux' "$RUNNER_TEMP/cli-alias-help.txt"
           for mode in main advanced; do
             find "$RUNNER_TEMP/outputs/$mode" -type f -name '*.mpeg2' | grep -q .
             find "$RUNNER_TEMP/outputs/$mode" -type f -name '*.ac3' | grep -q .
@@ -138,6 +145,69 @@ jobs:
             echo "$mode DVD DEMUX produced direct elementary video/audio and no MKV"
           done
           ( cd "$GITHUB_WORKSPACE/dist" && sha256sum muKsMaTT-0.0.2-PR2-DVD-CLI-Linux-amd64Standalone > SHA256SUMS.txt )
+
+      - name: Regression — existing CLI commands still run directly via ./standalone
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/dist"
+          standalone="./muKsMaTT-0.0.2-PR2-DVD-CLI-Linux-amd64Standalone"
+          cache="$RUNNER_TEMP/pr2-test-cache"
+          dvd="$RUNNER_TEMP/fixture/dvd"
+          test -f "$dvd/VIDEO_TS/VIDEO_TS.IFO"
+
+          # Verify all existing top-level CLI commands via ./standalone;
+          # do not use the GUI or a --cli prefix.
+          XDG_CACHE_HOME="$cache" timeout 30s "$standalone" --version > "$RUNNER_TEMP/cli-version.txt"
+          grep -Fq 'muKsMaTT CLI ' "$RUNNER_TEMP/cli-version.txt"
+          XDG_CACHE_HOME="$cache" timeout 30s "$standalone" --help > "$RUNNER_TEMP/cli-help.txt"
+          for preserved in \
+            'muksmatt-cli scan SOURCE' \
+            'muksmatt-cli metadata' \
+            'muksmatt-cli remux' \
+            'muksmatt-cli bluray demux' \
+            'muksmatt-cli --batch' \
+            'muksmatt-cli --version'; do
+            grep -Fq "$preserved" "$RUNNER_TEMP/cli-help.txt" || {
+              echo "::error::Missing existing CLI usage: $preserved"; exit 1;
+            }
+          done
+          for command in scan metadata remux; do
+            XDG_CACHE_HOME="$cache" timeout 30s "$standalone" "$command" --help \
+              > "$RUNNER_TEMP/cli-$command-help.txt" 2>&1
+            grep -Eiq 'usage|title' "$RUNNER_TEMP/cli-$command-help.txt"
+            echo "Original CLI entrypoint $command: OK"
+          done
+          for subcmd in scan tracks remux demux; do
+            XDG_CACHE_HOME="$cache" timeout 30s "$standalone" bluray "$subcmd" --help \
+              > "$RUNNER_TEMP/cli-bluray-$subcmd-help.txt" 2>&1
+            grep -Eiq 'usage|playlist|output' "$RUNNER_TEMP/cli-bluray-$subcmd-help.txt"
+            echo "Original Blu-ray CLI entrypoint $subcmd: OK"
+          done
+          XDG_CACHE_HOME="$cache" timeout 30s "$standalone" --batch --help \
+            > "$RUNNER_TEMP/cli-batch-help.txt" 2>&1
+          grep -Fq 'muksmatt-cli --batch' "$RUNNER_TEMP/cli-batch-help.txt"
+          for command in tools doctor; do
+            XDG_CACHE_HOME="$cache" timeout 60s "$standalone" "$command" \
+              > "$RUNNER_TEMP/cli-$command.txt" 2>&1
+            grep -Fq 'FFmpeg:' "$RUNNER_TEMP/cli-$command.txt"
+            grep -Fq 'FFprobe:' "$RUNNER_TEMP/cli-$command.txt"
+          done
+
+          # Real pre-existing metadata and REMUX operations on the DVD fixture.
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" metadata --title 1 "$dvd" \
+            > "$RUNNER_TEMP/cli-metadata.txt"
+          test -s "$RUNNER_TEMP/cli-metadata.txt"
+          mkdir -p "$RUNNER_TEMP/outputs/original-remux"
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" remux \
+            --title 1 --output "$RUNNER_TEMP/outputs/original-remux" "$dvd"
+          find "$RUNNER_TEMP/outputs/original-remux" -type f -iname '*.mkv' -size +0c | grep -q .
+          # REMUX intentionally writes MKV; the new DEMUX paths must not.
+          for mode in main advanced; do
+            if find "$RUNNER_TEMP/outputs/$mode" -type f -iname '*.mkv' | grep -q .; then
+              echo "::error::DEMUX $mode unexpectedly produced MKV"; exit 1
+            fi
+          done
+          echo 'PASS: both direct DVD DEMUX modes and all existing terminal CLI routes retained'
 
       - name: Upload private PR#2 standalone for owner testing (no release)
         uses: actions/upload-artifact@v4
