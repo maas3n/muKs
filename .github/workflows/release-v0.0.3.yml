@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/release-v0.0.3.yml
+      - scripts/build-v0.0.3-release.py
   workflow_dispatch:
 
 permissions:
