@@ -171,7 +171,11 @@ def main():
         shutil.copy2(prior / f"{PREFIX}-{PRIOR}-Linux-Library-Sources.tar.gz", lib_out)
         if sha(lib_out) != PRIOR_HASH[f"{PREFIX}-{PRIOR}-Linux-Library-Sources.tar.gz"]:
             raise RuntimeError("Bundled third-party library sources changed")
-        shutil.copy2(standalone, out / STANDALONE_NAME)
+        # The build workflow already writes the new standalone into --out.
+        # Do not attempt to copy a file onto itself (shutil.SameFileError).
+        final_standalone = out / STANDALONE_NAME
+        if not final_standalone.exists() or not os.path.samefile(standalone, final_standalone):
+            shutil.copy2(standalone, final_standalone)
         if sha(out / STANDALONE_NAME) != sha(standalone):
             raise RuntimeError("v0.0.3 standalone copy differs from tested build")
 
