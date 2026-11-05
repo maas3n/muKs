@@ -1,0 +1,262 @@
+name: Publish complete muKsMaTT v0.0.3 Linux release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-v0.0.3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-muksmatt-v0.0.3
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test and publish all seven v0.0.3 distribution assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout merged PR#2 in private muKs repository
+        uses: actions/checkout@v4
+
+      - name: Install Go GUI and authored DVD testing prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc g++ pkg-config xvfb xorg-dev libgl1-mesa-dev libgl1-mesa-dri \
+            libwayland-dev libxkbcommon-dev libbluray-dev libaacs0 libbdplus0 libudfread0 \
+            dvdauthor ffmpeg
+
+      - name: Set up the approved Go version
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+
+      - name: Download and SHA-256 verify complete prior v.0.0.2 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/prior" "$RUNNER_TEMP/source"
+          gh release download v.0.0.2 --repo "$GITHUB_REPOSITORY" \
+            --pattern 'muKsMaTT-0.0.2-Source.tar.gz' \
+            --pattern 'muKsMaTT-0.0.2-Linux-amd64.deb' \
+            --pattern 'muKsMaTT-0.0.2-Linux-amd64.tar.gz' \
+            --pattern 'muKsMaTT-0.0.2-Linux-Library-Sources.tar.gz' \
+            --pattern 'muKsMaTT-0.0.2-PR1-Linux-amd64Standalone' \
+            --dir "$RUNNER_TEMP/prior"
+          cd "$RUNNER_TEMP/prior"
+          cat > prior-shas.txt <<'EOF'
+          dc1d6e124b2087e421485718fb6e42406ff467a51629005966f70153d3db3057  muKsMaTT-0.0.2-Source.tar.gz
+          8275006216649c1eb163f223ef696f5b1914d6e25f361f992cf1991fb48c0e23  muKsMaTT-0.0.2-Linux-amd64.deb
+          8858ac82463132b0c147467ee3589646b7d42ea08722e371aba020f4b9e380aa  muKsMaTT-0.0.2-Linux-amd64.tar.gz
+          5d6048d9d4ba1bc3289b897887e818ef369597d25c0a0c6f998db38b50d29ec5  muKsMaTT-0.0.2-Linux-Library-Sources.tar.gz
+          674e510479bae54026b9ca522f7b3a5d4dab7cdef6947c8a0cb166b7601acc9d  muKsMaTT-0.0.2-PR1-Linux-amd64Standalone
+          EOF
+          sha256sum -c prior-shas.txt
+          tar -xzf muKsMaTT-0.0.2-Source.tar.gz -C "$RUNNER_TEMP/source"
+
+      - name: Apply merged PR#2 DVD CLI/UI change to the published source archive
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/source/muKsMaTT-0.0.2-Source"
+          python3 scripts/apply-dvd-demux-cli.py "$src"
+          test -f "$src/src/desktop_cli_dvd_demux.go"
+          test -f "$src/src/desktop_cli_dvd_demux_test.go"
+          echo "SOURCE_ROOT=$src" >> "$GITHUB_ENV"
+
+      - name: Run CLI regression tests and rebuild v0.0.3 GUI and CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compiled"
+          cd "$SOURCE_ROOT/src"
+          go test -tags cli -run '^(TestDVDCLI|TestAdvancedMergerDemuxInputPolicy|TestAdvancedMergerDemuxOpensOriginalDVDSource|TestDesktopCLIArguments)' -count=1 .
+          go build -trimpath -ldflags '-s -w -X main.appVersion=0.0.3' \
+            -o "$RUNNER_TEMP/compiled/muksmatt-bin" .
+          go build -tags cli -trimpath -ldflags '-s -w -X main.appVersion=0.0.3' \
+            -o "$RUNNER_TEMP/compiled/muksmatt-cli-bin" .
+          "$RUNNER_TEMP/compiled/muksmatt-cli-bin" --version | tee "$RUNNER_TEMP/version.txt"
+          grep -Fq '0.0.3' "$RUNNER_TEMP/version.txt"
+          "$RUNNER_TEMP/compiled/muksmatt-cli-bin" --help | grep -Fq 'advanced demux'
+          "$RUNNER_TEMP/compiled/muksmatt-cli-bin" --help | grep -Fq 'muksmatt-cli demux'
+
+      - name: Extract original runtime from verified v.0.0.2 standalone
+        run: |
+          set -euo pipefail
+          old="$RUNNER_TEMP/prior/muKsMaTT-0.0.2-PR1-Linux-amd64Standalone"
+          chmod +x "$old"
+          XDG_CACHE_HOME="$RUNNER_TEMP/original-cache" "$old" --standalone-self-test
+          root="$(find "$RUNNER_TEMP/original-cache/muksmatt/standalone" \
+            -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -n "$root"
+          test -f "$root/muksmatt-bin"
+          test -f "$root/muksmatt-cli-bin"
+          test -f "$root/ffmpeg"
+          test -f "$root/ffprobe"
+          echo "PRIOR_RUNTIME=$root" >> "$GITHUB_ENV"
+
+      - name: Build v0.0.3 standalone preserving all embedded media binaries
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/standalone-stage"
+          mkdir -p "$stage/payload" "$RUNNER_TEMP/distribution"
+          cp -a "$PRIOR_RUNTIME/." "$stage/payload/"
+          install -m 0755 "$RUNNER_TEMP/compiled/muksmatt-bin" "$stage/payload/muksmatt-bin"
+          install -m 0755 "$RUNNER_TEMP/compiled/muksmatt-cli-bin" "$stage/payload/muksmatt-cli-bin"
+          while IFS= read -r -d '' file; do
+            relative="$(realpath --relative-to="$PRIOR_RUNTIME" "$file")"
+            case "$relative" in
+              muksmatt-bin|muksmatt-cli-bin) continue ;;
+            esac
+            cmp "$file" "$stage/payload/$relative"
+          done < <(find "$PRIOR_RUNTIME" -type f -print0)
+          cp "$SOURCE_ROOT/packaging/linux/standalone/main.go" "$stage/main.go"
+          printf 'module muksmatt-standalone\n\ngo 1.27.1\n' > "$stage/go.mod"
+          ( cd "$stage" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+              -trimpath -ldflags '-s -w -X main.appVersion=0.0.3' \
+              -o "$RUNNER_TEMP/distribution/muKsMaTT-0.0.3-Linux-amd64Standalone" . )
+          chmod 755 "$RUNNER_TEMP/distribution/muKsMaTT-0.0.3-Linux-amd64Standalone"
+          standalone="$RUNNER_TEMP/distribution/muKsMaTT-0.0.3-Linux-amd64Standalone"
+          XDG_CACHE_HOME="$RUNNER_TEMP/new-cache" "$standalone" --standalone-self-test
+          XDG_CACHE_HOME="$RUNNER_TEMP/new-cache" "$standalone" --version | grep -Fq '0.0.3'
+
+      - name: Regression — actual DVD DEMUX directly from ./standalone without --cli
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/distribution"
+          standalone="./muKsMaTT-0.0.3-Linux-amd64Standalone"
+          cache="$RUNNER_TEMP/new-cache"
+          mkdir -p "$RUNNER_TEMP/fixture" \
+            "$RUNNER_TEMP/outputs/main" "$RUNNER_TEMP/outputs/advanced" \
+            "$RUNNER_TEMP/outputs/original-remux"
+          python3 "$SOURCE_ROOT/android/native/tests/make-dvd-demux-fixture.py" "$RUNNER_TEMP/fixture"
+          dvd="$RUNNER_TEMP/fixture/dvd"
+          test -f "$dvd/VIDEO_TS/VIDEO_TS.IFO"
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" demux \
+            --title 1 --output "$RUNNER_TEMP/outputs/main" --video mpeg2 "$dvd"
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" advanced demux \
+            --title 1 --output "$RUNNER_TEMP/outputs/advanced" --video mpeg2 "$dvd"
+          for mode in main advanced; do
+            find "$RUNNER_TEMP/outputs/$mode" -type f -name '*.mpeg2' -size +0c | grep -q .
+            find "$RUNNER_TEMP/outputs/$mode" -type f -name '*.ac3' -size +0c | grep -q .
+            if find "$RUNNER_TEMP/outputs/$mode" -type f -iname '*.mkv' | grep -q .; then
+              echo "::error::$mode DVD DEMUX unexpectedly produced MKV"
+              exit 1
+            fi
+          done
+          # Backwards-compatible existing terminal syntax and actual DVD REMUX.
+          XDG_CACHE_HOME="$cache" timeout 30s "$standalone" --help | grep -Fq 'bluray demux'
+          XDG_CACHE_HOME="$cache" timeout 30s "$standalone" --cli demux --help \
+            > "$RUNNER_TEMP/cli-compat-help.txt" 2>&1
+          grep -Fq 'Usage: muksmatt-cli demux' "$RUNNER_TEMP/cli-compat-help.txt"
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" metadata --title 1 "$dvd" \
+            > "$RUNNER_TEMP/metadata.txt"
+          test -s "$RUNNER_TEMP/metadata.txt"
+          XDG_CACHE_HOME="$cache" timeout 180s "$standalone" remux \
+            --title 1 --output "$RUNNER_TEMP/outputs/original-remux" "$dvd"
+          find "$RUNNER_TEMP/outputs/original-remux" -type f -iname '*.mkv' -size +0c | grep -q .
+          for command in scan metadata remux; do
+            XDG_CACHE_HOME="$cache" timeout 30s "$standalone" "$command" --help \
+              > "$RUNNER_TEMP/$command-help.txt" 2>&1
+            grep -Eiq 'usage|title' "$RUNNER_TEMP/$command-help.txt"
+          done
+          for subcmd in scan tracks remux demux; do
+            XDG_CACHE_HOME="$cache" timeout 30s "$standalone" bluray "$subcmd" --help \
+              > "$RUNNER_TEMP/bluray-$subcmd-help.txt" 2>&1
+            grep -Eiq 'usage|playlist|output' "$RUNNER_TEMP/bluray-$subcmd-help.txt"
+          done
+          echo 'PASS: both direct DVD DEMUX, original DVD REMUX, all existing CLI routes'
+
+      - name: Assemble and verify all Linux packages, source, dev ZIP and hashes
+        run: |
+          set -euo pipefail
+          python3 scripts/build-v0.0.3-release.py \
+            --prior-assets "$RUNNER_TEMP/prior" \
+            --patched-source "$SOURCE_ROOT" \
+            --gui "$RUNNER_TEMP/compiled/muksmatt-bin" \
+            --cli "$RUNNER_TEMP/compiled/muksmatt-cli-bin" \
+            --standalone "$RUNNER_TEMP/distribution/muKsMaTT-0.0.3-Linux-amd64Standalone" \
+            --out "$RUNNER_TEMP/distribution"
+          cd "$RUNNER_TEMP/distribution"
+          sha256sum -c SHA256SUMS.txt
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 7
+          echo 'Verified seven v0.0.3 release files'
+
+      - name: Publish complete private v0.0.3 pre-release with seven assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/RELEASE_NOTES.md" <<'EOF'
+          muKsMaTT v0.0.3 — DVD DEMUX CLI support (PR#2)
+
+          - Added direct DVD DEMUX CLI commands:
+              ./muKsMaTT-0.0.3-Linux-amd64Standalone demux --title 1 --output /output /DVD.iso
+              ./muKsMaTT-0.0.3-Linux-amd64Standalone advanced demux --title 1 --output /output /DVD.iso
+          - Added two matching DVD DEMUX examples in the in-app CLI tab.
+          - Preserved existing DVD REMUX, Blu-ray CLI, batch and diagnostics commands.
+          - Existing REMUX/DEMUX and ADVANCED media engines remain unchanged: direct DVD stream extraction, no temporary MKV.
+          - Includes the previous v.0.0.2 ADVANCED DVD MUX MKV-only UI fix.
+          - Both new terminal commands passed an authored-DVD end-to-end test.
+          - GUI and CLI rebuilt from merged PR#2 source with app version 0.0.3.
+          - Debian and portable Linux distributions contain both updated executables.
+          - Original FFmpeg, FFprobe, MediaInfo, libdvdcss, Blu-ray navigator and other bundled media files are byte-for-byte unchanged.
+          - Library source package is carried forward unchanged.
+          - All seven release files are verified with SHA256SUMS.txt.
+
+          Private pre-release published after owner tested PR#2 and approved merge/release.
+          EOF
+          if ! gh release view v0.0.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create v0.0.3 --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title 'muKsMaTT v0.0.3' --prerelease \
+              --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md"
+          else
+            gh release edit v0.0.3 --repo "$GITHUB_REPOSITORY" \
+              --title 'muKsMaTT v0.0.3' --prerelease \
+              --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md"
+          fi
+          dist="$RUNNER_TEMP/distribution"
+          gh release upload v0.0.3 \
+            "$dist/muKsMaTT-0.0.3-Linux-amd64.deb" \
+            "$dist/muKsMaTT-0.0.3-Linux-amd64.tar.gz" \
+            "$dist/muKsMaTT-0.0.3-Source.tar.gz" \
+            "$dist/muKsMaTT-0.0.3-Linux-Library-Sources.tar.gz" \
+            "$dist/muKsMaTT-0.0.3-Linux-amd64Standalone" \
+            "$dist/muKsMaTT-0.0.3-Linux-amd64-dev.zip" \
+            "$dist/SHA256SUMS.txt" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Verify every published remote asset size and SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.3" > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          rel = json.load(open(os.environ["RUNNER_TEMP"] + "/release.json"))
+          dist = pathlib.Path(os.environ["RUNNER_TEMP"]) / "distribution"
+          actual = {a["name"]: a for a in rel["assets"]}
+          expected = {p.name for p in dist.iterdir() if p.is_file()}
+          if rel.get("tag_name") != "v0.0.3" or rel.get("draft"):
+              raise RuntimeError("Wrong release tag or draft status")
+          if len(actual) != 7 or set(actual) != expected:
+              raise RuntimeError(f"Missing/unexpected assets: missing={expected-set(actual)}, extra={set(actual)-expected}")
+          for name in sorted(expected):
+              item, local = actual[name], dist / name
+              if item["size"] != local.stat().st_size:
+                  raise RuntimeError(f"Remote file size differs: {name}")
+              h = hashlib.sha256()
+              with local.open("rb") as f:
+                  for chunk in iter(lambda: f.read(4 * 1024 * 1024), b""):
+                      h.update(chunk)
+              if item.get("digest") != "sha256:" + h.hexdigest():
+                  raise RuntimeError(f"Remote SHA256 differs: {name}: {item.get('digest')}")
+              print("VERIFIED:", name, item["size"], item["digest"])
+          print("Complete v0.0.3 private release: all seven remote SHA256 digests verified")
+          PY
