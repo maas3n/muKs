@@ -32,10 +32,16 @@ func validateBundledWindowsToolFiles(exeDir string, tools toolPaths) error {
         tools.mediainfo,
         filepath.Join(filepath.Dir(tools.ffmpeg), "libdvdcss-2.dll"),
         filepath.Join(exeDir, "muksmatt-bluray-nav.exe"),
-        filepath.Join(exeDir, "libbluray-4.dll"),
         filepath.Join(exeDir, "libaacs-0.dll"),
         filepath.Join(exeDir, "libbdplus-0.dll"),
     }
+    // libbluray 1.3.4 has a platform-specific ABI DLL name. Accept the
+    // SINGLE bundled libbluray DLL after the CI has verified version 1.3.4.
+    matches, err := filepath.Glob(filepath.Join(exeDir, "libbluray-*.dll"))
+    if err != nil || len(matches) != 1 {
+        return fmt.Errorf("expected exactly one bundled libbluray 1.3.4 DLL (found %d)", len(matches))
+    }
+    required = append(required, matches[0])
     for _, path := range required {
         info, err := os.Stat(path)
         if err != nil || info.IsDir() || info.Size() == 0 {
