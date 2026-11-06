@@ -1,0 +1,215 @@
+name: Windows v0.0.3 experimental build
+
+on:
+  push:
+    branches: [port/windows-v0.0.3-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    name: Test Windows GUI CLI and Blu-ray companion
+    runs-on: windows-latest
+    timeout-minutes: 85
+    steps:
+      - name: Checkout packaging workflow
+        uses: actions/checkout@v4
+
+      - name: Configure approved Go toolchain
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+
+      - name: Download and verify exact released v0.0.3 source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'muksmatt-win-source'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          gh release download v0.0.3 --repo $env:GITHUB_REPOSITORY --pattern 'muKsMaTT-0.0.3-Source.tar.gz' --dir $root
+          if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
+          $archive = Join-Path $root 'muKsMaTT-0.0.3-Source.tar.gz'
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actual -ne 'd36d9e4128d0a9432d3da4916c5de7777208f0faf578d83b7f6c24055b5cbe10') { throw "Source SHA mismatch: $actual" }
+          tar -xzf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
+          $source = Join-Path $root 'muKsMaTT-0.0.3-Source'
+          foreach ($file in @('src/go.mod','src/main_windows_gui.go','src/desktop_cli_dvd_demux.go','src/main_cli.go','src/advanced_merger_demux.go','src/cli_ui_windows.go','tools/bluray/bluray_nav.c','packaging/windows/stage-bluray-windows.py')) {
+            if (-not (Test-Path (Join-Path $source $file))) { throw "Missing release source: $file" }
+          }
+          "MUKSMATT_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'Exact v0.0.3 source verified; no engine or Linux source modifications'
+
+      - name: Run native Windows Go regression tests and vet
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location (Join-Path $env:MUKSMATT_SOURCE 'src')
+          $env:CGO_ENABLED = '0'
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Go tests failed' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Go vet failed' }
+
+      - name: Compile the existing native Windows GUI and CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:CGO_ENABLED = '0'
+          $env:GOOS = 'windows'
+          $env:GOARCH = 'amd64'
+          $dest = Join-Path $env:RUNNER_TEMP 'muKsMaTT-Windows-portable'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Set-Location (Join-Path $env:MUKSMATT_SOURCE 'src')
+          go build -trimpath -buildvcs=false -ldflags '-s -w -H=windowsgui -X main.appVersion=0.0.3-windows-test' -o (Join-Path $dest 'muksmatt.exe') .
+          if ($LASTEXITCODE -ne 0) { throw 'Windows GUI build failed' }
+          go build -trimpath -buildvcs=false -tags cli -ldflags '-s -w -X main.appVersion=0.0.3-windows-test' -o (Join-Path $dest 'muksmatt-cli.exe') .
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI build failed' }
+          Copy-Item 'muksmatt.exe.manifest' (Join-Path $dest 'muksmatt.exe.manifest')
+          "MUKSMATT_STAGE=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Verify Windows console CLI preserves both DVD DEMUX and Blu-ray commands
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cli = Join-Path $env:MUKSMATT_STAGE 'muksmatt-cli.exe'
+          $version = (& $cli --version | Out-String)
+          if ($LASTEXITCODE -ne 0 -or -not $version.Contains('0.0.3-windows-test')) { throw 'Wrong Windows CLI version' }
+          $help = (& $cli --help | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'CLI --help failed' }
+          foreach ($token in @('scan SOURCE','metadata','remux','demux','advanced demux','bluray scan','bluray tracks','bluray remux','bluray demux','--batch','--version')) {
+            if (-not $help.Contains($token)) { throw "CLI help missing: $token" }
+          }
+          foreach ($argsList in @(@('demux','--help'),@('advanced','demux','--help'),@('bluray','demux','--help'),@('bluray','remux','--help'))) {
+            $result = (& $cli @argsList 2>&1 | Out-String)
+            if ($LASTEXITCODE -ne 0 -or $result -notmatch 'Usage:') { throw "CLI command help failed: $($argsList -join ' ')" }
+          }
+          Write-Host 'DVD and Blu-ray CLI command routing: PASS'
+
+      - name: Install native Blu-ray companion compilation dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-libbluray
+            mingw-w64-x86_64-libaacs
+            mingw-w64-x86_64-libbdplus
+
+      - name: Build native Windows libbluray companion
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd "$(cygpath -u "$MUKSMATT_SOURCE")"
+          cc -O2 -Wall -Wextra -Werror -o "$(cygpath -u "$MUKSMATT_STAGE")/muksmatt-bluray-nav.exe" tools/bluray/bluray_nav.c $(pkg-config --cflags --libs libbluray)
+          test "$("$(cygpath -u "$MUKSMATT_STAGE")/muksmatt-bluray-nav.exe" --version)" = 'MUKSMATT_BD_NAV_1'
+          echo "MINGW_BIN=$(cygpath -w /mingw64/bin)" >> "$GITHUB_ENV"
+          echo "MINGW_OBJDUMP=$(cygpath -w /mingw64/bin/objdump.exe)" >> "$GITHUB_ENV"
+
+      - name: Stage and smoke-test native Blu-ray dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $helper = Join-Path $env:MUKSMATT_STAGE 'muksmatt-bluray-nav.exe'
+          $destination = Join-Path $env:RUNNER_TEMP 'blu-ray-dependencies'
+          $stager = Join-Path $env:MUKSMATT_SOURCE 'packaging/windows/stage-bluray-windows.py'
+          python $stager --helper $helper --mingw-bin $env:MINGW_BIN --objdump $env:MINGW_OBJDUMP --dest $destination
+          if ($LASTEXITCODE -ne 0) { throw 'Blu-ray helper DLL staging failed' }
+          foreach ($name in @('muksmatt-bluray-nav.exe','libbluray-4.dll','libaacs-0.dll','libbdplus-0.dll','DEPENDENCIES.json')) {
+            if (-not (Test-Path (Join-Path $destination $name))) { throw "Missing native Blu-ray dependency: $name" }
+          }
+          $protocol = (& (Join-Path $destination 'muksmatt-bluray-nav.exe') --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $protocol -ne 'MUKSMATT_BD_NAV_1') { throw 'Bundled Blu-ray DLLs failed to load' }
+          Copy-Item -Recurse -Force (Join-Path $destination '*') $env:MUKSMATT_STAGE
+
+      - name: Windows GUI startup smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $p = Start-Process -FilePath (Join-Path $env:MUKSMATT_STAGE 'muksmatt.exe') -WorkingDirectory $env:MUKSMATT_STAGE -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            $p.Refresh()
+            if ($p.HasExited) { throw "Windows GUI exited unexpectedly: $($p.ExitCode)" }
+            Write-Host 'Windows GUI process is running'
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create and validate portable Windows TEST ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = $env:MUKSMATT_STAGE
+          $readme = @'
+          muKsMaTT 0.0.3 - EXPERIMENTAL WINDOWS TEST (AMD64)
+
+          Extract the ZIP to a normal folder before starting.
+
+          GUI: Double-click muksmatt.exe.
+          Terminal: Open PowerShell in this folder and use muksmatt-cli.exe.
+
+          .\muksmatt-cli.exe --help
+          .\muksmatt-cli.exe --version
+          .\muksmatt-cli.exe scan "D:\DVD"
+          .\muksmatt-cli.exe demux --title 1 --output "C:\Videos\DVD" "D:\DVD"
+          .\muksmatt-cli.exe advanced demux --title 1 --output "C:\Videos\DVD" "D:\DVD"
+          .\muksmatt-cli.exe bluray scan "D:\BDMV"
+          .\muksmatt-cli.exe bluray tracks --playlist 00800 "D:\BDMV"
+          .\muksmatt-cli.exe bluray demux --playlist 00800 --output "C:\Videos\BD" "D:\BDMV"
+
+          At first use, this program downloads checksum-verified Windows
+          FFmpeg and MediaInfo packages into the user's application data.
+          Internet access may be required for media operations.
+          Bundled native Blu-ray navigator and dependent DLLs are included.
+          DVD and Blu-ray paths above are examples, not guaranteed drive names.
+
+          This is a PRIVATE TEST artifact only. CLI routing, native build,
+          native helper DLL loading and GUI startup are checked by CI,
+          but DVD/Blu-ray disc operations need testing on real Windows media.
+          No change to the Linux media engine or previous Linux release.
+          '@
+          Set-Content (Join-Path $stage 'README-WINDOWS.txt') $readme -Encoding utf8
+          $hashes = foreach ($file in (Get-ChildItem $stage -File -Recurse | Sort-Object FullName)) {
+            $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            "$((Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant())  $relative"
+          }
+          Set-Content (Join-Path $stage 'SHA256SUMS.txt') $hashes -Encoding ascii
+          $out = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $zip = Join-Path $out 'muKsMaTT-0.0.3-Windows-amd64-TEST.zip'
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw 'Portable Windows ZIP missing' }
+          $check = Join-Path $env:RUNNER_TEMP 'verify-muksmatt-zip'
+          Expand-Archive -Path $zip -DestinationPath $check
+          foreach ($item in @('muksmatt.exe','muksmatt-cli.exe','muksmatt-bluray-nav.exe','README-WINDOWS.txt','SHA256SUMS.txt')) {
+            if (-not (Test-Path (Join-Path $check $item))) { throw "ZIP missing $item" }
+          }
+          foreach ($line in (Get-Content (Join-Path $check 'SHA256SUMS.txt'))) {
+            if ($line -notmatch '^([0-9a-f]{64})  (.+)$') { throw "Invalid SHA256 entry: $line" }
+            $wanted = $Matches[1]
+            $path = Join-Path $check ($Matches[2].Replace('/', '\'))
+            if ((Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() -ne $wanted) { throw "Corrupt ZIP entry: $path" }
+          }
+          $digest = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          "sha256 $digest" | Set-Content (Join-Path $out 'WINDOWS-ZIP-SHA256.txt')
+          Write-Host "Verified Windows trial ZIP SHA256: $digest"
+
+      - name: Upload private test artifact only, without release
+        uses: actions/upload-artifact@v4
+        with:
+          name: muKsMaTT-v0.0.3-Windows-amd64-TEST
+          path: |
+            dist/muKsMaTT-0.0.3-Windows-amd64-TEST.zip
+            dist/WINDOWS-ZIP-SHA256.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
