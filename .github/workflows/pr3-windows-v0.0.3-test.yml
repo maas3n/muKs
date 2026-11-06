@@ -87,7 +87,7 @@ jobs:
           }
           foreach ($argsList in @(@('demux','--help'),@('advanced','demux','--help'),@('bluray','demux','--help'),@('bluray','remux','--help'))) {
             $result = (& $cli @argsList 2>&1 | Out-String)
-            if ($LASTEXITCODE -ne 0 -or $result -notmatch 'Usage:') { throw "CLI command help failed: $($argsList -join ' ')" }
+            if ($LASTEXITCODE -ne 0 -or $result -notmatch '(?i)Usage(:| of )') { throw "CLI command help failed: $($argsList -join ' '); output: $result" }
           }
           Write-Host 'DVD and Blu-ray CLI command routing: PASS'
 
