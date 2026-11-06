@@ -53,6 +53,9 @@ jobs:
           EOF
           sha256sum -c exact-linux-sha256.txt
           cp exact-linux-sha256.txt "$GITHUB_WORKSPACE/parity-audit/"
+          # Archive is already checksum-verified; include it in the private audit
+          # artifact for line-by-line Windows-only source inspection.
+          cp muKsMaTT-0.0.3-Source.tar.gz "$GITHUB_WORKSPACE/parity-audit/"
           tar -xzf muKsMaTT-0.0.3-Source.tar.gz -C "$RUNNER_TEMP/parity-source"
           test -f "$RUNNER_TEMP/parity-source/muKsMaTT-0.0.3-Source/src/go.mod"
           echo 'Verified precise Linux reference inputs. Never substitute tool versions.'
