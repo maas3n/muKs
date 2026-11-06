@@ -1,0 +1,99 @@
+name: Windows parity — audit Linux v0.0.3 runtime before any port
+
+on:
+  push:
+    branches:
+      - port/windows-parity-v0.0.3
+    paths:
+      - .github/workflows/windows-parity-audit.yml
+      - scripts/audit-linux-v0.0.3-for-windows.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-linux-reference:
+    name: Verify ALL bundled Linux tools, versions, libraries and feature flags
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout isolated audit scripts; leave Linux app untouched
+        uses: actions/checkout@v4
+
+      - name: Install runtime libraries needed to inspect Linux standalone
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dri libgl1 libx11-6 libxcursor1 libxrandr2 \
+            libxinerama1 libxi6 libxkbcommon0 libwayland-client0 \
+            libbluray2 libaacs0 libbdplus0 libudfread0 file binutils
+
+      - name: Download exact Linux v0.0.3 releases from muKs and verify SHA256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/parity-download" "$RUNNER_TEMP/parity-source" \
+            "$GITHUB_WORKSPACE/parity-audit"
+          cd "$RUNNER_TEMP/parity-download"
+          gh release download v0.0.3 --repo "$GITHUB_REPOSITORY" \
+            --pattern 'muKsMaTT-0.0.3-Linux-amd64Standalone' \
+            --pattern 'muKsMaTT-0.0.3-Linux-amd64.deb' \
+            --pattern 'muKsMaTT-0.0.3-Linux-amd64.tar.gz' \
+            --pattern 'muKsMaTT-0.0.3-Linux-Library-Sources.tar.gz' \
+            --pattern 'muKsMaTT-0.0.3-Source.tar.gz' --dir .
+          cat > exact-linux-sha256.txt <<'EOF'
+          c15c5861a6f84e8ec8a71649e569fd25304a5f73eab161ded42880c8c5b94ba9  muKsMaTT-0.0.3-Linux-amd64Standalone
+          88c95838991c62692e5f1237972aa09f02dfc3b0e3ded3b2f7cbb7334369dc5a  muKsMaTT-0.0.3-Linux-amd64.deb
+          0238e7226d8387a61873371eec335e71c263d6fd4c414529932be607d44888a7  muKsMaTT-0.0.3-Linux-amd64.tar.gz
+          5d6048d9d4ba1bc3289b897887e818ef369597d25c0a0c6f998db38b50d29ec5  muKsMaTT-0.0.3-Linux-Library-Sources.tar.gz
+          d36d9e4128d0a9432d3da4916c5de7777208f0faf578d83b7f6c24055b5cbe10  muKsMaTT-0.0.3-Source.tar.gz
+          EOF
+          sha256sum -c exact-linux-sha256.txt
+          cp exact-linux-sha256.txt "$GITHUB_WORKSPACE/parity-audit/"
+          tar -xzf muKsMaTT-0.0.3-Source.tar.gz -C "$RUNNER_TEMP/parity-source"
+          test -f "$RUNNER_TEMP/parity-source/muKsMaTT-0.0.3-Source/src/go.mod"
+          echo 'Verified precise Linux reference inputs. Never substitute tool versions.'
+
+      - name: Extract exact Linux v0.0.3 standalone and list every embedded file
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/parity-download/muKsMaTT-0.0.3-Linux-amd64Standalone"
+          chmod 0755 "$binary"
+          XDG_CACHE_HOME="$RUNNER_TEMP/parity-cache" "$binary" --standalone-self-test
+          root="$(find "$RUNNER_TEMP/parity-cache/muksmatt/standalone" \
+            -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -n "$root"
+          test -f "$root/ffmpeg"
+          test -f "$root/ffprobe"
+          echo "LINUX_PAYLOAD=$root" >> "$GITHUB_ENV"
+          find "$root" -type f | sort | sed "s!^$root/!!" \
+            > "$GITHUB_WORKSPACE/parity-audit/linux-full-file-list.txt"
+          dpkg-deb --contents "$RUNNER_TEMP/parity-download/muKsMaTT-0.0.3-Linux-amd64.deb" \
+            > "$GITHUB_WORKSPACE/parity-audit/linux-debian-file-list.txt"
+          tar -tzf "$RUNNER_TEMP/parity-download/muKsMaTT-0.0.3-Linux-amd64.tar.gz" \
+            > "$GITHUB_WORKSPACE/parity-audit/linux-portable-file-list.txt"
+          tar -tzf "$RUNNER_TEMP/parity-download/muKsMaTT-0.0.3-Linux-Library-Sources.tar.gz" \
+            > "$GITHUB_WORKSPACE/parity-audit/linux-library-source-file-list.txt"
+          echo 'Extracted all Linux package inventories, including third-party source references.'
+
+      - name: Build immutable tool and capabilities manifest for Windows parity
+        run: |
+          set -euo pipefail
+          python3 scripts/audit-linux-v0.0.3-for-windows.py \
+            --payload "$LINUX_PAYLOAD" \
+            --source "$RUNNER_TEMP/parity-source/muKsMaTT-0.0.3-Source" \
+            --out "$GITHUB_WORKSPACE/parity-audit"
+          test -s "$GITHUB_WORKSPACE/parity-audit/linux-v0.0.3-runtime-manifest.json"
+          test -s "$GITHUB_WORKSPACE/parity-audit/linux-v0.0.3-tool-files.txt"
+          test -s "$GITHUB_WORKSPACE/parity-audit/linux-v0.0.3-source-dependency-references.txt"
+
+      - name: Upload private verified Linux reference manifests (not a Windows build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: muKsMaTT-v0.0.3-Linux-Tool-Parity-Audit
+          path: parity-audit/
+          retention-days: 30
+          if-no-files-found: error
