@@ -41,7 +41,7 @@ func TestWindowsBundledRuntimeFailsClosedOnMissingDependencies(t *testing.T) {
         tools.mediainfo,
         filepath.Join(filepath.Dir(tools.ffmpeg), "libdvdcss-2.dll"),
         filepath.Join(root, "muksmatt-bluray-nav.exe"),
-        filepath.Join(root, "libbluray-4.dll"),
+        filepath.Join(root, "libbluray-2.dll"),
         filepath.Join(root, "libaacs-0.dll"),
         filepath.Join(root, "libbdplus-0.dll"),
     }
