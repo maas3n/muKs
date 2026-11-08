@@ -7,6 +7,10 @@ muKsMaTT is a Linux media utility for exploring DVD titles and Blu-ray playlists
 
 **Current version:** **[v0.0.3](https://github.com/maas3n/muKs/releases/tag/v0.0.3)** · **Linux x86-64 (amd64)** · Pre-release
 
+<a href="docs/screenshots/source-menu.png">
+  <img src="docs/screenshots/source-menu.png" width="420" alt="muKsMaTT source menu showing DVD / MKV and Blu-ray">
+</a>
+
 ## Features
 
 - **DVD and Blu-ray:** Open DVD ISO images, `VIDEO_TS` folders, and supported drives; inspect Blu-ray `BDMV` sources, supported ISOs, and accessible drives.
