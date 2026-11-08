@@ -116,23 +116,23 @@ Both DVD DEMUX modes use the existing extraction paths without generating an int
 
 ```bash
 # Discover Blu-ray playlists; pick the correct playlist ID
-"$APP" bluray scan '/path/to/BDMV'
+muksmatt bluray scan '/path/to/BDMV/ISO/OR/DRIVE'
 
 # Inspect video/audio/subtitle streams in playlist 00800
-"$APP" bluray tracks --playlist 00800 '/path/to/BDMV'
+muksmatt bluray tracks --playlist 00800 '/path/to/BDMV/ISO/OR/DRIVE'
 
 # REMUX playlist 00800 to MKV, preserving compatible streams
-"$APP" bluray remux --playlist 00800 --output './output/movie.mkv' '/path/to/BDMV'
+muksmatt bluray remux --playlist 00800 --output '/output/folder/movie.mkv' '/path/to/BDMV/ISO/OR/DRIVE'
 
 # REMUX to M2TS instead (no chapters; compatible video/audio/PGS)
-"$APP" bluray remux --playlist 00800 --output './output/movie.m2ts' '/path/to/BDMV'
+muksmatt bluray remux --playlist 00800 --output '/output/folder/movie.m2ts' '/path/to/BDMV/ISO/OR/DRIVE'
 
 # DEMUX into elementary video, audio and subtitle tracks
-"$APP" bluray demux --playlist 00800 --output './output' '/path/to/BDMV'
+muksmatt bluray demux --playlist 00800 --output '/output/folder' '/path/to/BDMV/ISO/OR/DRIVE'
 
 # Also available: video-only M2TS, or BOTH native video + M2TS
-"$APP" bluray demux --playlist 00800 --video m2ts --output './output' '/path/to/BDMV'
-"$APP" bluray demux --playlist 00800 --video both --output './output' '/path/to/BDMV'
+muksmatt bluray demux --playlist 00800 --video m2ts --output '/output/folder' '/path/to/BDMV/ISO/OR/DRIVE'
+muksmatt bluray demux --playlist 00800 --video both --output '/output/folder' '/path/to/BDMV/ISO/OR/DRIVE'
 ```
 
 Some Blu-ray discs contain misleading or looping playlists, so **scan and specify `--playlist`** rather than assuming the longest is the correct movie. Protected Blu-rays require correctly configured AACS/BD+ support.
@@ -141,19 +141,19 @@ Some Blu-ray discs contain misleading or looping playlists, so **scan and specif
 
 ```bash
 # Batch-remux supported DVD movies in a collection
-"$APP" --batch '/path/to/DVD-collection' './output'
+muksmatt --batch '/path/to/DVD-collection' '/output/folder'
 
 # Same batch operation with an appended activity log
-"$APP" --batch --log './output/batch.log' '/path/to/DVD-collection' './output'
+muksmatt --batch --log '/output/folder/batch.log' '/path/to/DVD-collection' '/output/folder'
 
 # Version, command help, resolved tools and diagnostics
-"$APP" --version
-"$APP" --help
-"$APP" tools
-"$APP" doctor
+muksmatt --version
+muksmatt --help
+muksmatt tools
+muksmatt doctor
 
 # Test extraction/availability of the standalone's bundled runtime
-"$APP" --standalone-self-test
+muksmatt --standalone-self-test
 ```
 
 ## Full CLI reference — commands, flags and defaults
