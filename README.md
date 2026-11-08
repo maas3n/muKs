@@ -30,43 +30,6 @@ All files are published under **[v0.0.3 on GitHub Releases](https://github.com/m
 | Development bundle | [Development `.zip`](https://github.com/maas3n/muKs/releases/download/v0.0.3/muKsMaTT-0.0.3-Linux-amd64-dev.zip) |
 | Checksums | [`SHA256SUMS.txt`](https://github.com/maas3n/muKs/releases/download/v0.0.3/SHA256SUMS.txt) |
 
-> **Repository access:** `maas3n/muKs` is currently **private**. Downloads require access to that repository. The ordinary browser links work for authorized signed-in users; command-line downloads require authentication. If the repository becomes public, the simpler public commands below will work without authentication.
-
-### Download with `curl` or `wget`
-
-If you are authorized to access this private release, sign in with GitHub CLI (`gh auth login`) first. The following commands download the **exact v0.0.3 standalone asset** using a token with repository **Contents: read** permission:
-
-**curl**
-
-```bash
-GH_TOKEN="$(gh auth token)"
-curl -fL --show-error \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H 'Accept: application/octet-stream' \
-  -o muKsMaTT-0.0.3-Linux-amd64Standalone \
-  'https://api.github.com/repos/maas3n/muKs/releases/assets/715240972'
-```
-
-**wget** (alternative)
-
-```bash
-GH_TOKEN="$(gh auth token)"
-wget --header="Authorization: Bearer $GH_TOKEN" \
-  --header='Accept: application/octet-stream' \
-  -O muKsMaTT-0.0.3-Linux-amd64Standalone \
-  'https://api.github.com/repos/maas3n/muKs/releases/assets/715240972'
-```
-
-**Simplest authenticated option**, if you already use `gh`:
-
-```bash
-gh release download v0.0.3 -R maas3n/muKs \
-  -p 'muKsMaTT-0.0.3-Linux-amd64Standalone'
-```
-
-<details>
-<summary><strong>Public-release download commands (only if the repository becomes public)</strong></summary>
-
 ```bash
 # curl
 curl -fLO 'https://github.com/maas3n/muKs/releases/download/v0.0.3/muKsMaTT-0.0.3-Linux-amd64Standalone'
@@ -322,6 +285,13 @@ For individual flag help, for example:
 - Preserved existing FFmpeg/media-processing engine code and bundled media libraries.
 
 The v0.0.3 release is a **pre-release**. Refer to [release notes](https://github.com/maas3n/muKs/releases/tag/v0.0.3) for the published asset list and changes.
+
+## Support muKsMaTT
+
+If muKsMaTT is useful to you and you'd like to support its development, Bitcoin donations are appreciated but entirely optional.
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg" width="14" height="14"> **BTC:** `bc1q79hj2zukfmm75278a7wssjmexanuhvs5nequel`
+
 
 ## Checksums, license and project links
 
