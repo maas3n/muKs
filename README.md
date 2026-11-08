@@ -78,16 +78,9 @@ The standalone bundles media-processing tools, but the GUI still needs compatibl
 
 The CLI tab is **optional**. The standalone accepts CLI commands directly: `./muKsMaTT-0.0.3-Linux-amd64Standalone COMMAND ...`.
 
-## Command-line quick start
 
-For the examples below, set a shell shortcut and create an output folder:
 
-```bash
-APP='./muKsMaTT-0.0.3-Linux-amd64Standalone'
-mkdir -p './output'
-```
-
-Change the sample paths and title/playlist numbers to match your disc. Run `scan` or `tracks` / `metadata` before selecting streams. **All commands below use the terminal directly; no GUI or `--cli` prefix is necessary.**
+Replace "muksmatt" with "./muKsMaTT-0.0.3-Linux-amd64Standalone" if using the standalone **All commands below use the terminal directly; no GUI or `--cli` prefix is necessary.**
 
 ### DVD — scan, remux, demux
 
