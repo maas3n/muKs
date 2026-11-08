@@ -5,6 +5,8 @@
 
 muKsMaTT is a Linux media utility for exploring DVD titles and Blu-ray playlists, inspecting their tracks, and choosing what to keep. **REMUX** supported streams into MKV or M2TS, or **DEMUX** video, audio, and subtitles into separate files. Its interface is built with **Go and Fyne**; the media workflows use FFmpeg and stream copying where supported, without unnecessary re-encoding.
 
+### !!everything has been tested, except DVD and Bluray decryption. i would really appreciate help testing on DVD/BD rom, encrypted physical disks!!
+
 **Current version:** **[v0.0.3](https://github.com/maas3n/muKs/releases/tag/v0.0.3)** · **Linux x86-64 (amd64)** · Pre-release
 
 <a href="docs/screenshots/source-menu.png">
