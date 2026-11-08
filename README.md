@@ -87,27 +87,27 @@ Change the sample paths and title/playlist numbers to match your disc. Run `scan
 
 ```bash
 # Discover DVD titles (the longest is marked)
-"$APP" scan '/path/to/DVD.iso'
+muksmatt scan '/path/to/DVD.iso/DVDdrive/or/folder'
 
 # Inspect the streams and chapters in title 1
-"$APP" metadata --title 1 '/path/to/DVD.iso'
+muksmatt metadata --title 1 '/path/to/DVD.iso/DVDdrive/or/folder'
 
 # REMUX title 1 into MKV (REMUX/DEMUX workflow)
-"$APP" remux --title 1 --output './output' '/path/to/DVD.iso'
+muksmatt remux --title 1 --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
 
 # DEMUX selected streams directly (REMUX/DEMUX implementation)
-"$APP" demux --title 1 --output './output' '/path/to/DVD.iso'
+muksmatt demux --title 1 --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
 
 # DEMUX directly with the ADVANCED implementation
-"$APP" advanced demux --title 1 --output './output' '/path/to/DVD.iso'
+muksmatt advanced demux --title 1 --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
 ```
 
 To demux specific tracks, export VOB video, or omit chapters:
 
 ```bash
-"$APP" demux --title 1 --streams 0,1,2 --output './output' '/path/to/DVD.iso'
-"$APP" advanced demux --title 1 --video vob --output './output' '/path/to/DVD.iso'
-"$APP" demux --title 1 --no-chapters --output './output' '/path/to/DVD.iso'
+muksmatt demux --title 1 --streams 0,1,2 --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
+muksmatt advanced demux --title 1 --video vob --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
+muksmatt demux --title 1 --no-chapters --output '/output/folder' '/path/to/DVD.iso/DVDdrive/or/folder'
 ```
 
 Both DVD DEMUX modes use the existing extraction paths without generating an intermediate MKV. DVD REMUX, by contrast, intentionally produces an MKV.
