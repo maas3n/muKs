@@ -232,16 +232,16 @@ The tables below document **all supported application-level flags** in v0.0.3, o
 
 ```bash
 # Tracks command aliases
-"$APP" bluray metadata --playlist 00800 '/path/to/BDMV'
-"$APP" bluray info --playlist 00800 '/path/to/BDMV'
+muksmatt bluray metadata --playlist 00800 '/path/to/BDMV/ISO/OR/DRIVE'
+muksmatt bluray info --playlist 00800 '/path/to/BDMV/ISO/OR/DRIVE'
 
 # REMUX a subset of streams to MKV without chapters
-"$APP" bluray remux --playlist 00800 --streams 0,1 --no-chapters \
-  --output './output/movie.mkv' '/path/to/BDMV'
+muksmatt bluray remux --playlist 00800 --streams 0,1 --no-chapters \
+  --output '/output/folder/movie.mkv' '/path/to/BDMV/ISO/OR/DRIVE'
 
 # DEMUX specific tracks as elementary streams, without chapters
-"$APP" bluray demux --playlist 00800 --streams 0,1,9 --video elementary \
-  --no-chapters --output './output' '/path/to/BDMV'
+muksmatt bluray demux --playlist 00800 --streams 0,1,9 --video elementary \
+  --no-chapters --output '/output/folder' '/path/to/BDMV/ISO/OR/DRIVE'
 ```
 
 </details>
@@ -267,11 +267,11 @@ Batch mode looks for `VIDEO_TS` movie folders directly inside `MOVIES_ROOT`, plu
 For individual flag help, for example:
 
 ```bash
-"$APP" demux --help
-"$APP" advanced demux --help
-"$APP" bluray remux --help
-"$APP" bluray demux --help
-"$APP" --help
+muksmatt demux --help
+muksmatt advanced demux --help
+muksmatt bluray remux --help
+muksmatt bluray demux --help
+muksmatt --help
 ```
 
 </details>
