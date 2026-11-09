@@ -1,0 +1,57 @@
+{
+  "source": "user-supplied Windows binaries; SHA256 verified locally; NOT authenticated against original publisher checksum",
+  "source_revision": "N-126479-g08cd8df29d-20260908",
+  "linux_ffmpeg_sha256": "d6454810f94fb770722f804cdb1818c3933f6167d01f4d36ddf3450785f43f25",
+  "files": [
+    {
+      "filename": "ffmpeg.exe",
+      "sha256": "79440f5048b011b1725feb3af54eedbfe7b3628247fa18e35cf26fcdff5d6e82",
+      "bytes": 548864
+    },
+    {
+      "filename": "ffprobe.exe",
+      "sha256": "c3a10cc99f182036b8e714b48b93dce87bff734aded3752a405ca76fd521f3d4",
+      "bytes": 227840
+    },
+    {
+      "filename": "ffplay.exe",
+      "sha256": "21629c82a34ac4b625bd0aa220654bf100f4d825576c4a62c7884d656012d0d3",
+      "bytes": 18094080
+    },
+    {
+      "filename": "avcodec-63.dll",
+      "sha256": "e4f1620482c536eda2b70c3dcc6c7df6ebcae7b8943bf2e79f8bec91e2900520",
+      "bytes": 98941440
+    },
+    {
+      "filename": "avdevice-63.dll",
+      "sha256": "570d1e5f75a18b793b2c162d957c235b6c682f757e3f2a794e72b815ee71dd8f",
+      "bytes": 3923968
+    },
+    {
+      "filename": "avfilter-12.dll",
+      "sha256": "595bc317f5484191f5fc4856af4a6ed0bcc8e9df730376e26109e55f15ebf64d",
+      "bytes": 35905536
+    },
+    {
+      "filename": "avformat-63.dll",
+      "sha256": "3d4bb4c448224bbe14494897e1cee45fc0661169e80f571c2d35cfd0c3b6aaf2",
+      "bytes": 23118336
+    },
+    {
+      "filename": "avutil-61.dll",
+      "sha256": "525c3ba72b8cd066ade897a132268ad7cd5a8df273603a70208dd7d9165d717e",
+      "bytes": 2955776
+    },
+    {
+      "filename": "swresample-7.dll",
+      "sha256": "202165f14c6ef8cd2e454ac76d5fd36ddc0f418d9cad24827ae953feb9eaf92f",
+      "bytes": 728576
+    },
+    {
+      "filename": "swscale-10.dll",
+      "sha256": "cc092321a71dde287c03fab4136a740d3dd0d9015b19109bcac2a01db4f4fa41",
+      "bytes": 2519552
+    }
+  ]
+}

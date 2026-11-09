@@ -1,0 +1,16 @@
+name: Diagnose original Windows media releases (exact versions only)
+on:
+  push:
+    branches: [port/windows-parity-v0.0.3]
+    paths: [.github/workflows/windows-parity-upstream-check.yml, scripts/check-upstream-windows-parity.sh]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-versions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original upstream source archives and signed package availability
+        run: bash scripts/check-upstream-windows-parity.sh

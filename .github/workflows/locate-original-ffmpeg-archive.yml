@@ -1,0 +1,36 @@
+name: Locate authentic archived September 8 Windows FFmpeg binary
+
+on:
+  push:
+    branches: [port/windows-parity-v0.0.3]
+    paths:
+      - .github/workflows/locate-original-ffmpeg-archive.yml
+      - scripts/find-original-windows-ffmpeg-archive.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archival-search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out only muKs Windows research branch
+        uses: actions/checkout@v4
+
+      - name: Inspect original BtbN release, GitHub Actions artifacts and Wayback
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/find-original-windows-ffmpeg-archive.py
+          test -s ffmpeg-provenance/original-ffmpeg-archival-search.json
+
+      - name: Upload read-only archival provenance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: muKsMaTT-Original-BtbN-FFmpeg-Archive-Search
+          path: ffmpeg-provenance/
+          retention-days: 14
+          if-no-files-found: error
